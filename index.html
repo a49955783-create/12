@@ -2,72 +2,278 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <title>📌 نموذج استلام العمليات 📌</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>📌 نموذج استلام العمليات — OCR (صورة → نص) بدون رموز ألوان</title>
   <style>
-    body { font-family: "Tahoma", sans-serif; background:#f9f9f9; margin:0; padding:20px; }
-    .card { background:#fff; padding:20px; border-radius:12px; box-shadow:0 2px 6px rgba(0,0,0,0.1); max-width:700px; margin:auto; }
-    h2 { margin-top:0; text-align:center; }
-    textarea, input { width:100%; margin:8px 0; padding:8px; border:1px solid #ddd; border-radius:6px; }
-    button { padding:10px 15px; margin:5px 0; border:none; border-radius:6px; background:#333; color:#fff; cursor:pointer; }
-    button:hover { background:#555; }
-    .out { white-space: pre-wrap; background:#fafafa; border:1px dashed #ccc; padding:10px; border-radius:6px; margin-top:10px; }
-    img { max-width:100%; margin-top:10px; border-radius:8px; }
+    body{font-family: -apple-system, system-ui, "Segoe UI", Tahoma, Arial, "Noto Naskh Arabic UI", "Noto Kufi Arabic", sans-serif; margin:0; background:#f7f7f8; color:#0f172a}
+    .wrap{max-width: 960px; margin: 24px auto; padding: 16px;}
+    .card{background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:18px; box-shadow:0 6px 24px rgba(0,0,0,.05); margin-bottom:14px;}
+    h1{margin:0 0 8px; font-size:clamp(18px,3vw,24px)}
+    .muted{color:#64748b; font-size:13px}
+    label{font-size:13px; color:#64748b; display:block; margin-bottom:6px}
+    input, textarea, select, button{width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:12px; background:#fff; font-size:14px}
+    textarea{min-height:110px; resize:vertical}
+    button{cursor:pointer; background:#0f172a; color:#fff}
+    button.ghost{background:#fff; color:#0f172a; border-color:#cbd5e1}
+    .row{display:grid; gap:12px}
+    @media (min-width:760px){ .row-2{grid-template-columns: 1fr 1fr;} }
+    .out{white-space: pre-wrap; border:1px dashed #e5e7eb; background:#fff; border-radius:14px; padding:14px; line-height:1.9}
+    .drop{border:2px dashed #cbd5e1; border-radius:14px; padding:16px; text-align:center; background:#fafafa}
+    .list{display:flex; flex-direction:column; gap:8px}
+    .item{display:flex; gap:8px; align-items:center; padding:8px; border:1px solid #e5e7eb; border-radius:12px; background:#fff}
+    .item input[type='text']{flex:1}
+    .flex{display:flex; gap:10px; flex-wrap:wrap}
+    .img{max-width:100%; border-radius:12px}
+    .small{font-size:12px; color:#64748b}
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>📌 نموذج استلام العمليات 📌</h2>
+  <div class="wrap">
+    <div class="card">
+      <h1>🧭 نموذج استلام العمليات — OCR</h1>
+      <div class="muted">
+        • ارفع صورة أو الصقها (Ctrl+V) لاستخراج الأسماء والأكواد تلقائيًا. <br>
+        • لا تُستخدم رموز/ألوان الصورة في الناتج (حسب طلبك). يمكنك تعديل حالة كل اسم يدويًا بسرعة. <br>
+        • المستلم يُحتسب ضمن عدد «في الميدان» لكنه لا يُعرض ضمن الأسماء.
+      </div>
+    </div>
 
-    <label>المستلم:</label>
-    <input id="recipient" placeholder="اكتب اسم المستلم">
+    <div class="card">
+      <div class="row row-2">
+        <div>
+          <label for="recipient">المستلم</label>
+          <input id="recipient" placeholder="اكتب اسم المستلم">
+        </div>
+        <div>
+          <label for="deputy">النائب</label>
+          <input id="deputy" placeholder="اكتب اسم النائب">
+        </div>
+      </div>
 
-    <label>النائب:</label>
-    <input id="deputy" placeholder="اكتب اسم النائب">
+      <div style="margin-top:10px" class="row row-2">
+        <div>
+          <label>📷 ارفع صورة</label>
+          <input id="imgInput" type="file" accept="image/*">
+        </div>
+        <div>
+          <label>أو ألصق صورة هنا (Ctrl+V)</label>
+          <div id="drop" class="drop">الصق صورة هنا أو اسحبها وأفلِتها</div>
+        </div>
+      </div>
 
-    <label>أسماء في الميدان (سطر لكل اسم):</label>
-    <textarea id="fieldNames"></textarea>
+      <div id="previewWrap" style="margin-top:10px; display:none">
+        <img id="preview" class="img" alt="image preview">
+        <div class="small">تم تحميل الصورة — اضغط «استخراج من الصورة» لقراءة الأسماء.</div>
+      </div>
 
-    <label>أسماء مشغول (سطر لكل اسم):</label>
-    <textarea id="busyNames"></textarea>
+      <div class="flex" style="margin-top:10px">
+        <button id="extract">استخراج من الصورة (OCR)</button>
+        <button class="ghost" id="clear">إعادة تعيين</button>
+      </div>
+      <div id="progress" class="small" style="margin-top:8px; display:none"></div>
+    </div>
 
-    <label>أسماء خارج الخدمة (سطر لكل اسم):</label>
-    <textarea id="oosNames"></textarea>
+    <div class="card">
+      <div class="muted" style="margin-bottom:8px">القائمة المستخرجة (عدِّل الحالة لكل اسم إذا لزم):</div>
+      <div id="list" class="list"></div>
+    </div>
 
-    <label>📷 أرفق صورة (اختياري):</label>
-    <input type="file" id="imgInput" accept="image/*">
-
-    <button onclick="generate()">توليد النص</button>
-    <div id="output" class="out"></div>
-    <div id="imgPreview"></div>
+    <div class="card">
+      <div class="flex">
+        <button id="generate">توليد النص النهائي</button>
+        <button class="ghost" id="copyAr">نسخ النص العربي</button>
+      </div>
+      <div id="outAr" class="out" dir="rtl" style="margin-top:10px"></div>
+    </div>
   </div>
 
+  <!-- Tesseract.js (OCR) -->
+  <script src="https://unpkg.com/tesseract.js@v5/dist/tesseract.min.js"></script>
   <script>
-    function generate(){
-      let recipient = document.getElementById("recipient").value.trim();
-      let deputy = document.getElementById("deputy").value.trim();
-      let field = document.getElementById("fieldNames").value.trim().split("\n").filter(x=>x);
-      let busy = document.getElementById("busyNames").value.trim().split("\n").filter(x=>x).map(n=> n+" (مشغول)");
-      let oos = document.getElementById("oosNames").value.trim().split("\n").filter(x=>x);
+    // State
+    let people = []; // { name, code, status: 'field' | 'busy' | 'oos' }
+    let imageBlobUrl = null;
 
-      // المستلم يحسب ضمن العدد لكنه لا يُعرض
-      let totalField = field.length + busy.length + 1; 
+    const $ = (id)=>document.getElementById(id);
+    const drop = $("drop");
+    const previewWrap = $("previewWrap");
+    const preview = $("preview");
+    const progress = $("progress");
+    const copyBtn = $("copyAr");
 
-      let text = `📌 استلام العمليات 📌\n\nالمستلم : ${recipient}\n\nالنائب : ${deputy}\n\nعدد و اسماء الوحدات الاسعافيه في الميدان : {${totalField}}\n${field.concat(busy).map(n=>"- "+n).join("\n")}\n\nخارج الخدمه : (${oos.length})\n\n🎙️ تم استلام العمليات و جاهزون للتعامل مع البلاغات\n\nالملاحظات : تحديث`;
-
-      document.getElementById("output").innerText = text;
+    // Helpers
+    function parseLinesToPeople(text){
+      // Split into lines, try to extract: "Name ... CODE"
+      const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(s=>s && /[\u0600-\u06FF]/.test(s));
+      const arr = [];
+      for(const line of lines){
+        // Try grab last token as code (e.g., A-1, DS2, AD1, T-6, C14)
+        const m = line.match(/^(.*?)[\s\-–]+([A-Za-z]{1,3}-?\d{1,3})$/);
+        if(m){
+          let name = m[1].trim();
+          let code = m[2].trim();
+          if(name) arr.push({ name, code, status: 'field' }); // default field
+        }else{
+          if(line.length > 1){
+            arr.push({ name: line, code: '', status: 'field' });
+          }
+        }
+      }
+      return arr;
     }
 
-    // رفع صورة للمعاينة
-    document.getElementById("imgInput").addEventListener("change", function(e){
-      let file = e.target.files[0];
-      if(file){
-        let reader = new FileReader();
-        reader.onload = function(evt){
-          document.getElementById("imgPreview").innerHTML = `<img src="${evt.target.result}" alt="صورة مرفوعة">`;
-        }
-        reader.readAsDataURL(file);
+    function renderList(){
+      const list = $("list");
+      list.innerHTML = "";
+      people.forEach((p, idx)=>{
+        const wrapper = document.createElement("div");
+        wrapper.className = "item";
+        wrapper.innerHTML = `
+          <input type="text" value="${p.name}" aria-label="name" data-k="name" />
+          <input type="text" value="${p.code}" aria-label="code" style="max-width:120px" data-k="code" placeholder="الكود" />
+          <select data-k="status" style="max-width:150px">
+            <option value="field" ${p.status==='field'?'selected':''}>في الميدان</option>
+            <option value="busy" ${p.status==='busy'?'selected':''}>مشغول</option>
+            <option value="oos" ${p.status==='oos'?'selected':''}>خارج الخدمة</option>
+          </select>
+        `;
+        // Events
+        wrapper.querySelectorAll("input,select").forEach(el=>{
+          el.addEventListener("input", (e)=>{
+            const k = el.dataset.k;
+            people[idx][k] = el.value;
+          });
+          el.addEventListener("change", (e)=>{
+            const k = el.dataset.k;
+            people[idx][k] = el.value;
+          });
+        });
+        list.appendChild(wrapper);
+      });
+    }
+
+    function generateOutput(){
+      const recipient = $("recipient").value.trim();
+      const deputy = $("deputy").value.trim();
+
+      const inField = people.filter(p=>p.status!=='oos'); // field + busy
+      const busy = people.filter(p=>p.status==='busy');
+      const oos = people.filter(p=>p.status==='oos');
+
+      // المستلم يُحتسب ضمن عدد الميدان ولا يُعرض
+      const totalField = inField.length + (recipient ? 1 : 0);
+
+      const namesList = inField.map(p => `- ${p.name}${p.code? ' ' + p.code : ''}${p.status==='busy' ? ' (مشغول)' : ''}`).join("\n");
+
+      let text = `📌 استلام العمليات 📌
+
+المستلم : ${recipient}
+
+النائب : ${deputy}
+
+عدد و اسماء الوحدات الاسعافيه في الميدان : {${totalField}}
+${namesList}
+
+خارج الخدمه : (${oos.length})
+
+🎙️ تم استلام العمليات و جاهزون للتعامل مع البلاغات
+
+الملاحظات : تحديث`;
+
+      $("outAr").textContent = text;
+    }
+
+    // Copy Arabic
+    copyBtn.addEventListener("click", async()=>{
+      const txt = $("outAr").textContent || "";
+      if(!txt) { alert("لا يوجد نص لنسخه."); return; }
+      try{
+        await navigator.clipboard.writeText(txt);
+        copyBtn.textContent = "تم النسخ ✅";
+        setTimeout(()=>copyBtn.textContent="نسخ النص العربي", 1500);
+      }catch(e){
+        alert("تعذّر النسخ تلقائيًا. حدد النص وانسخه يدويًا.");
       }
     });
+
+    // Image loading (file)
+    $("imgInput").addEventListener("change", (e)=>{
+      const file = e.target.files?.[0];
+      if(!file) return;
+      if(imageBlobUrl) URL.revokeObjectURL(imageBlobUrl);
+      imageBlobUrl = URL.createObjectURL(file);
+      preview.src = imageBlobUrl;
+      previewWrap.style.display = "";
+    });
+
+    // Paste image handler
+    window.addEventListener("paste", (e)=>{
+      const items = e.clipboardData?.items || [];
+      for(const it of items){
+        if(it.type.startsWith("image/")){
+          const file = it.getAsFile();
+          if(imageBlobUrl) URL.revokeObjectURL(imageBlobUrl);
+          imageBlobUrl = URL.createObjectURL(file);
+          preview.src = imageBlobUrl;
+          previewWrap.style.display = "";
+          e.preventDefault();
+          break;
+        }
+      }
+    });
+
+    // Drag & drop image
+    ;["dragover","drop"].forEach(ev=>drop.addEventListener(ev, e=>e.preventDefault()));
+    drop.addEventListener("drop", (e)=>{
+      const file = e.dataTransfer?.files?.[0];
+      if(file && file.type.startsWith("image/")){
+        if(imageBlobUrl) URL.revokeObjectURL(imageBlobUrl);
+        imageBlobUrl = URL.createObjectURL(file);
+        preview.src = imageBlobUrl;
+        previewWrap.style.display = "";
+      }
+    });
+
+    // OCR
+    $("extract").addEventListener("click", async()=>{
+      if(!imageBlobUrl){ alert("الرجاء إضافة صورة أولاً (رفع، لصق، أو سحب وإفلات)."); return; }
+      progress.style.display = "";
+      progress.textContent = "جاري قراءة النص من الصورة…";
+      try{
+        const worker = await Tesseract.createWorker();
+        await worker.loadLanguage('ara+eng');
+        await worker.initialize('ara+eng');
+        const { data } = await worker.recognize(imageBlobUrl, { tessedit_char_blacklist: '•●◦▪■□' });
+        await worker.terminate();
+
+        const extracted = data.text || "";
+        const parsed = parseLinesToPeople(extracted);
+        people = parsed;
+        renderList();
+        progress.textContent = "تم استخراج النص. يمكنك تعديل الحالات ثم توليد النص.";
+      }catch(err){
+        console.error(err);
+        alert("حصل خطأ أثناء قراءة النص. جرّب صورة أوضح أو قصّ الجزء المطلوب.");
+        progress.textContent = "";
+      }
+    });
+
+    $("generate").addEventListener("click", generateOutput);
+
+    $("clear").addEventListener("click", ()=>{
+      people = [];
+      renderList();
+      $("recipient").value = "";
+      $("deputy").value = "";
+      $("outAr").textContent = "";
+      if(imageBlobUrl) URL.revokeObjectURL(imageBlobUrl);
+      imageBlobUrl = null;
+      preview.src = "";
+      previewWrap.style.display = "none";
+      progress.style.display = "none";
+      $("imgInput").value = "";
+    });
+
   </script>
 </body>
 </html>
