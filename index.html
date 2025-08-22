@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <title>📌 نموذج استلام العمليات 📌</title>
+  <style>
+    body { font-family: "Tahoma", sans-serif; background:#f9f9f9; margin:0; padding:20px; }
+    .card { background:#fff; padding:20px; border-radius:12px; box-shadow:0 2px 6px rgba(0,0,0,0.1); max-width:700px; margin:auto; }
+    h2 { margin-top:0; text-align:center; }
+    textarea, input { width:100%; margin:8px 0; padding:8px; border:1px solid #ddd; border-radius:6px; }
+    button { padding:10px 15px; margin:5px 0; border:none; border-radius:6px; background:#333; color:#fff; cursor:pointer; }
+    button:hover { background:#555; }
+    .out { white-space: pre-wrap; background:#fafafa; border:1px dashed #ccc; padding:10px; border-radius:6px; margin-top:10px; }
+    img { max-width:100%; margin-top:10px; border-radius:8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>📌 نموذج استلام العمليات 📌</h2>
+
+    <label>المستلم:</label>
+    <input id="recipient" placeholder="اكتب اسم المستلم">
+
+    <label>النائب:</label>
+    <input id="deputy" placeholder="اكتب اسم النائب">
+
+    <label>أسماء في الميدان (سطر لكل اسم):</label>
+    <textarea id="fieldNames"></textarea>
+
+    <label>أسماء مشغول (سطر لكل اسم):</label>
+    <textarea id="busyNames"></textarea>
+
+    <label>أسماء خارج الخدمة (سطر لكل اسم):</label>
+    <textarea id="oosNames"></textarea>
+
+    <label>📷 أرفق صورة (اختياري):</label>
+    <input type="file" id="imgInput" accept="image/*">
+
+    <button onclick="generate()">توليد النص</button>
+    <div id="output" class="out"></div>
+    <div id="imgPreview"></div>
+  </div>
+
+  <script>
+    function generate(){
+      let recipient = document.getElementById("recipient").value.trim();
+      let deputy = document.getElementById("deputy").value.trim();
+      let field = document.getElementById("fieldNames").value.trim().split("\n").filter(x=>x);
+      let busy = document.getElementById("busyNames").value.trim().split("\n").filter(x=>x).map(n=> n+" (مشغول)");
+      let oos = document.getElementById("oosNames").value.trim().split("\n").filter(x=>x);
+
+      // المستلم يحسب ضمن العدد لكنه لا يُعرض
+      let totalField = field.length + busy.length + 1; 
+
+      let text = `📌 استلام العمليات 📌\n\nالمستلم : ${recipient}\n\nالنائب : ${deputy}\n\nعدد و اسماء الوحدات الاسعافيه في الميدان : {${totalField}}\n${field.concat(busy).map(n=>"- "+n).join("\n")}\n\nخارج الخدمه : (${oos.length})\n\n🎙️ تم استلام العمليات و جاهزون للتعامل مع البلاغات\n\nالملاحظات : تحديث`;
+
+      document.getElementById("output").innerText = text;
+    }
+
+    // رفع صورة للمعاينة
+    document.getElementById("imgInput").addEventListener("change", function(e){
+      let file = e.target.files[0];
+      if(file){
+        let reader = new FileReader();
+        reader.onload = function(evt){
+          document.getElementById("imgPreview").innerHTML = `<img src="${evt.target.result}" alt="صورة مرفوعة">`;
+        }
+        reader.readAsDataURL(file);
+      }
+    });
+  </script>
+</body>
+</html>
