@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>📌 نموذج استلام العمليات — OCR (صورة → نص) بدون رموز ألوان</title>
+  <title>📌 نموذج استلام العمليات — OCR + كشف اللون (جاهز GitHub/Vercel)</title>
   <style>
     body{font-family: -apple-system, system-ui, "Segoe UI", Tahoma, Arial, "Noto Naskh Arabic UI", "Noto Kufi Arabic", sans-serif; margin:0; background:#f7f7f8; color:#0f172a}
-    .wrap{max-width: 960px; margin: 24px auto; padding: 16px;}
+    .wrap{max-width: 980px; margin: 24px auto; padding: 16px;}
     .card{background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:18px; box-shadow:0 6px 24px rgba(0,0,0,.05); margin-bottom:14px;}
     h1{margin:0 0 8px; font-size:clamp(18px,3vw,24px)}
     .muted{color:#64748b; font-size:13px}
@@ -25,16 +25,17 @@
     .flex{display:flex; gap:10px; flex-wrap:wrap}
     .img{max-width:100%; border-radius:12px}
     .small{font-size:12px; color:#64748b}
+    canvas{display:none}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>🧭 نموذج استلام العمليات — OCR</h1>
+      <h1>🧭 نموذج استلام العمليات — OCR + كشف اللون</h1>
       <div class="muted">
         • ارفع صورة أو الصقها (Ctrl+V) لاستخراج الأسماء والأكواد تلقائيًا. <br>
-        • لا تُستخدم رموز/ألوان الصورة في الناتج (حسب طلبك). يمكنك تعديل حالة كل اسم يدويًا بسرعة. <br>
-        • المستلم يُحتسب ضمن عدد «في الميدان» لكنه لا يُعرض ضمن الأسماء.
+        • النظام يحدد الحالة من لون النقطة بجانب كل اسم: أخضر=في الميدان، بنفسجي=مشغول، أحمر=خارج الخدمة. <br>
+        • الإخراج النهائي بدون ألوان (نص فقط). المستلم يُحتسب ضمن العدد ولا يُعرض ضمن الأسماء.
       </div>
     </div>
 
@@ -63,7 +64,8 @@
 
       <div id="previewWrap" style="margin-top:10px; display:none">
         <img id="preview" class="img" alt="image preview">
-        <div class="small">تم تحميل الصورة — اضغط «استخراج من الصورة» لقراءة الأسماء.</div>
+        <div class="small">تم تحميل الصورة — اضغط «استخراج من الصورة» لقراءة الأسماء وتحديد الحالة من اللون.</div>
+        <canvas id="cvs"></canvas>
       </div>
 
       <div class="flex" style="margin-top:10px">
@@ -74,7 +76,7 @@
     </div>
 
     <div class="card">
-      <div class="muted" style="margin-bottom:8px">القائمة المستخرجة (عدِّل الحالة لكل اسم إذا لزم):</div>
+      <div class="muted" style="margin-bottom:8px">القائمة المستخرجة (يمكن تعديل الحالة يدويًا):</div>
       <div id="list" class="list"></div>
     </div>
 
@@ -91,8 +93,10 @@
   <script src="https://unpkg.com/tesseract.js@v5/dist/tesseract.min.js"></script>
   <script>
     // State
-    let people = []; // { name, code, status: 'field' | 'busy' | 'oos' }
+    let people = []; // { name, code, status: 'field' | 'busy' | 'oos', bbox }
     let imageBlobUrl = null;
+    let imgEl = null;
+    let canvas = null, ctx = null;
 
     const $ = (id)=>document.getElementById(id);
     const drop = $("drop");
@@ -102,24 +106,83 @@
     const copyBtn = $("copyAr");
 
     // Helpers
-    function parseLinesToPeople(text){
-      // Split into lines, try to extract: "Name ... CODE"
-      const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(s=>s && /[\u0600-\u06FF]/.test(s));
-      const arr = [];
-      for(const line of lines){
-        // Try grab last token as code (e.g., A-1, DS2, AD1, T-6, C14)
-        const m = line.match(/^(.*?)[\s\-–]+([A-Za-z]{1,3}-?\d{1,3})$/);
-        if(m){
-          let name = m[1].trim();
-          let code = m[2].trim();
-          if(name) arr.push({ name, code, status: 'field' }); // default field
-        }else{
-          if(line.length > 1){
-            arr.push({ name: line, code: '', status: 'field' });
+    function parseNameCode(text){
+      text = text.replace(/[🟢🟣🔴●•■□▪▫◦]/g, "").trim();
+      const m = text.match(/^(.*?)[\s\-–]+([A-Za-z]{1,4}-?\d{1,4})$/);
+      if(m){
+        return { name: m[1].trim(), code: m[2].trim() };
+      }
+      return { name: text, code: "" };
+    }
+
+    function hsvFromRgb(r,g,b){
+      r/=255; g/=255; b/=255;
+      const max=Math.max(r,g,b), min=Math.min(r,g,b);
+      let h,s,v=max;
+      const d=max-min;
+      s=max===0?0:d/max;
+      if(max===min){ h=0; }
+      else{
+        switch(max){
+          case r: h=(g-b)/d + (g<b?6:0); break;
+          case g: h=(b-r)/d + 2; break;
+          case b: h=(r-g)/d + 4; break;
+        }
+        h/=6;
+      }
+      return { h: h*360, s, v };
+    }
+
+    function classifyHue(avg){
+      if(avg.s < 0.35 || avg.v < 0.3) return "unknown";
+      const h = avg.h;
+      if((h >= 70 && h <= 170)) return "green";
+      if((h >= 260 && h <= 320)) return "purple";
+      if(h <= 20 || h >= 340) return "red";
+      return "unknown";
+    }
+
+    function sampleColorNearBBox(b){
+      if(!ctx) return "unknown";
+      const w = canvas.width, h = canvas.height;
+      const x0 = Math.max(0, b.x0|0), x1 = Math.min(w-1, b.x1|0);
+      const y0 = Math.max(0, b.y0|0), y1 = Math.min(h-1, b.y1|0);
+      const lineH = Math.max(1, y1-y0);
+      const pad = Math.floor(lineH * 0.2);
+      const boxW = Math.max(8, Math.floor(lineH * 0.8));
+      const midY = Math.floor((y0+y1)/2);
+
+      function avgHSV(sx, sy, ex, ey){
+        sx=Math.max(0,sx); sy=Math.max(0,sy); ex=Math.min(w-1,ex); ey=Math.min(h-1,ey);
+        if(ex<=sx || ey<=sy) return {h:0,s:0,v:0,count:0};
+        const data = ctx.getImageData(sx, sy, ex-sx, ey-sy).data;
+        let sumH=0, sumS=0, sumV=0, cnt=0;
+        for(let i=0;i<data.length;i+=4){
+          const r=data[i], g=data[i+1], b=data[i+2], a=data[i+3];
+          if(a<10) continue;
+          const hsv=hsvFromRgb(r,g,b);
+          if(hsv.s>0.5 && hsv.v>0.35){
+            sumH+=hsv.h; sumS+=hsv.s; sumV+=hsv.v; cnt++;
           }
         }
+        if(cnt===0) return {h:0,s:0,v:0,count:0};
+        return {h:sumH/cnt, s:sumS/cnt, v:sumV/cnt, count:cnt};
       }
-      return arr;
+
+      const rightBox = { sx: x1 + pad, sy: midY - Math.floor(boxW/2), ex: x1 + pad + boxW, ey: midY + Math.floor(boxW/2) };
+      let avg = avgHSV(rightBox.sx, rightBox.sy, rightBox.ex, rightBox.ey);
+      let cls = classifyHue(avg);
+      if(cls!=="unknown") return cls;
+
+      const leftBox = { sx: x0 - pad - boxW, sy: midY - Math.floor(boxW/2), ex: x0 - pad, ey: midY + Math.floor(boxW/2) };
+      avg = avgHSV(leftBox.sx, leftBox.sy, leftBox.ex, leftBox.ey);
+      cls = classifyHue(avg);
+      if(cls!=="unknown") return cls;
+
+      const innerBox = { sx: x1 - boxW, sy: midY - Math.floor(boxW/2), ex: x1, ey: midY + Math.floor(boxW/2) };
+      avg = avgHSV(innerBox.sx, innerBox.sy, innerBox.ex, innerBox.ey);
+      cls = classifyHue(avg);
+      return cls;
     }
 
     function renderList(){
@@ -131,22 +194,15 @@
         wrapper.innerHTML = `
           <input type="text" value="${p.name}" aria-label="name" data-k="name" />
           <input type="text" value="${p.code}" aria-label="code" style="max-width:120px" data-k="code" placeholder="الكود" />
-          <select data-k="status" style="max-width:150px">
+          <select data-k="status" style="max-width:180px">
             <option value="field" ${p.status==='field'?'selected':''}>في الميدان</option>
             <option value="busy" ${p.status==='busy'?'selected':''}>مشغول</option>
             <option value="oos" ${p.status==='oos'?'selected':''}>خارج الخدمة</option>
           </select>
         `;
-        // Events
         wrapper.querySelectorAll("input,select").forEach(el=>{
-          el.addEventListener("input", (e)=>{
-            const k = el.dataset.k;
-            people[idx][k] = el.value;
-          });
-          el.addEventListener("change", (e)=>{
-            const k = el.dataset.k;
-            people[idx][k] = el.value;
-          });
+          el.addEventListener("input", ()=> people[idx][el.dataset.k] = el.value );
+          el.addEventListener("change", ()=> people[idx][el.dataset.k] = el.value );
         });
         list.appendChild(wrapper);
       });
@@ -156,11 +212,9 @@
       const recipient = $("recipient").value.trim();
       const deputy = $("deputy").value.trim();
 
-      const inField = people.filter(p=>p.status!=='oos'); // field + busy
-      const busy = people.filter(p=>p.status==='busy');
+      const inField = people.filter(p=>p.status!=='oos');
       const oos = people.filter(p=>p.status==='oos');
 
-      // المستلم يُحتسب ضمن عدد الميدان ولا يُعرض
       const totalField = inField.length + (recipient ? 1 : 0);
 
       const namesList = inField.map(p => `- ${p.name}${p.code? ' ' + p.code : ''}${p.status==='busy' ? ' (مشغول)' : ''}`).join("\n");
@@ -183,7 +237,6 @@ ${namesList}
       $("outAr").textContent = text;
     }
 
-    // Copy Arabic
     copyBtn.addEventListener("click", async()=>{
       const txt = $("outAr").textContent || "";
       if(!txt) { alert("لا يوجد نص لنسخه."); return; }
@@ -192,21 +245,28 @@ ${namesList}
         copyBtn.textContent = "تم النسخ ✅";
         setTimeout(()=>copyBtn.textContent="نسخ النص العربي", 1500);
       }catch(e){
-        alert("تعذّر النسخ تلقائيًا. حدد النص وانسخه يدويًا.");
+        alert("تعذّر النسخ تلقائيًا. حدّد النص وانسخه يدويًا.");
       }
     });
 
-    // Image loading (file)
+    function prepareCanvasFromImg(){
+      const canvasEl = $("cvs");
+      const context = canvasEl.getContext("2d", { willReadFrequently: true });
+      canvasEl.width = preview.naturalWidth;
+      canvasEl.height = preview.naturalHeight;
+      context.drawImage(preview, 0, 0);
+      canvas = canvasEl; ctx = context;
+    }
+
     $("imgInput").addEventListener("change", (e)=>{
       const file = e.target.files?.[0];
       if(!file) return;
       if(imageBlobUrl) URL.revokeObjectURL(imageBlobUrl);
       imageBlobUrl = URL.createObjectURL(file);
+      preview.onload = ()=>{ previewWrap.style.display = ""; prepareCanvasFromImg(); };
       preview.src = imageBlobUrl;
-      previewWrap.style.display = "";
     });
 
-    // Paste image handler
     window.addEventListener("paste", (e)=>{
       const items = e.clipboardData?.items || [];
       for(const it of items){
@@ -214,27 +274,25 @@ ${namesList}
           const file = it.getAsFile();
           if(imageBlobUrl) URL.revokeObjectURL(imageBlobUrl);
           imageBlobUrl = URL.createObjectURL(file);
+          preview.onload = ()=>{ previewWrap.style.display = ""; prepareCanvasFromImg(); };
           preview.src = imageBlobUrl;
-          previewWrap.style.display = "";
           e.preventDefault();
           break;
         }
       }
     });
 
-    // Drag & drop image
     ;["dragover","drop"].forEach(ev=>drop.addEventListener(ev, e=>e.preventDefault()));
     drop.addEventListener("drop", (e)=>{
       const file = e.dataTransfer?.files?.[0];
       if(file && file.type.startsWith("image/")){
         if(imageBlobUrl) URL.revokeObjectURL(imageBlobUrl);
         imageBlobUrl = URL.createObjectURL(file);
+        preview.onload = ()=>{ previewWrap.style.display = ""; prepareCanvasFromImg(); };
         preview.src = imageBlobUrl;
-        previewWrap.style.display = "";
       }
     });
 
-    // OCR
     $("extract").addEventListener("click", async()=>{
       if(!imageBlobUrl){ alert("الرجاء إضافة صورة أولاً (رفع، لصق، أو سحب وإفلات)."); return; }
       progress.style.display = "";
@@ -246,14 +304,38 @@ ${namesList}
         const { data } = await worker.recognize(imageBlobUrl, { tessedit_char_blacklist: '•●◦▪■□' });
         await worker.terminate();
 
-        const extracted = data.text || "";
-        const parsed = parseLinesToPeople(extracted);
-        people = parsed;
+        const lines = data.lines || data.words?.map(w=>({ text: w.text, bbox: w.bbox })) || [];
+        people = [];
+        for(const line of lines){
+          const txt = (line.text || "").trim();
+          if(!txt) continue;
+          if(!(/[\u0600-\u06FF]/.test(txt))) continue;
+
+          const { name, code } = parseNameCode(txt);
+          if(!name) continue;
+
+          const bbox = line.bbox || line;
+          const cls = sampleColorNearBBox(bbox);
+          let status = "field";
+          if(cls === "purple") status = "busy";
+          else if(cls === "red") status = "oos";
+          else status = "field";
+
+          people.push({ name, code, status, bbox });
+        }
+
+        const unique = new Map();
+        for(const p of people){
+          const key = (p.name + "|" + p.code).trim();
+          if(!unique.has(key)) unique.set(key, p);
+        }
+        people = Array.from(unique.values());
+
         renderList();
-        progress.textContent = "تم استخراج النص. يمكنك تعديل الحالات ثم توليد النص.";
+        progress.textContent = "تم استخراج الأسماء وتحديد الحالات من اللون. يمكنك تعديلها ثم توليد النص.";
       }catch(err){
         console.error(err);
-        alert("حصل خطأ أثناء قراءة النص. جرّب صورة أوضح أو قصّ الجزء المطلوب.");
+        alert("حصل خطأ أثناء القراءة. جرّب صورة أوضح أو قصّ الجزء المطلوب.");
         progress.textContent = "";
       }
     });
@@ -273,7 +355,6 @@ ${namesList}
       progress.style.display = "none";
       $("imgInput").value = "";
     });
-
   </script>
 </body>
 </html>
